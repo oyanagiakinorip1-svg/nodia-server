@@ -3,8 +3,6 @@ import { handle } from 'hono/vercel'
 import { cors } from 'hono/cors'
 import { supabaseForToken } from '../lib/supabase'
 
-export const config = { runtime: 'nodejs' }
-
 type Variables = {
   supabase: ReturnType<typeof supabaseForToken>
   userId: string
@@ -108,7 +106,3 @@ app.delete('/connections/:id', async (c) => {
 })
 
 export default handle(app)
-export const GET = handle(app)
-export const POST = handle(app)
-export const PUT = handle(app)
-export const DELETE = handle(app)
