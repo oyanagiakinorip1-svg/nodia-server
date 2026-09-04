@@ -29,14 +29,41 @@ app.use('*', async (c, next) => {
 })
 
 type PositionInput = { x: number; y: number; z: number }
-type NodeInput = { title?: string; content?: string; position?: PositionInput }
+type NodeInput = { title?: string; content?: string; position?: PositionInput; space_id?: string }
 
-// Combined snapshot used to restore the whole 3D space in one round trip on login.
+// A user's list of spaces (shown right after login, before any space loads).
+app.get('/spaces', async (c) => {
+  const { data, error } = await c
+    .get('supabase')
+    .from('spaces')
+    .select('*')
+    .order('created_at')
+  if (error) return c.json({ error: error.message }, 500)
+  return c.json(data)
+})
+
+app.post('/spaces', async (c) => {
+  const body = await c.req.json<{ name?: string }>()
+  const { data, error } = await c
+    .get('supabase')
+    .from('spaces')
+    .insert({ user_id: c.get('userId'), name: body.name?.trim() || '無題のスペース' })
+    .select()
+    .single()
+  if (error) return c.json({ error: error.message }, 500)
+  return c.json(data, 201)
+})
+
+// Combined snapshot used to restore one space's nodes/connections in one
+// round trip once the player has picked (or created) a space.
 app.get('/space', async (c) => {
+  const spaceId = c.req.query('space_id')
+  if (!spaceId) return c.json({ error: 'missing space_id' }, 400)
+
   const supabase = c.get('supabase')
   const [nodes, connections] = await Promise.all([
-    supabase.from('nodes').select('*').order('created_at'),
-    supabase.from('connections').select('*'),
+    supabase.from('nodes').select('*').eq('space_id', spaceId).order('created_at'),
+    supabase.from('connections').select('*').eq('space_id', spaceId),
   ])
   if (nodes.error) return c.json({ error: nodes.error.message }, 500)
   if (connections.error) return c.json({ error: connections.error.message }, 500)
@@ -45,11 +72,13 @@ app.get('/space', async (c) => {
 
 app.post('/nodes', async (c) => {
   const body = await c.req.json<NodeInput>()
+  if (!body.space_id) return c.json({ error: 'missing space_id' }, 400)
   const { data, error } = await c
     .get('supabase')
     .from('nodes')
     .insert({
       user_id: c.get('userId'),
+      space_id: body.space_id,
       title: body.title ?? '',
       content: body.content ?? '',
       position_x: body.position?.x ?? 0,
@@ -88,11 +117,17 @@ app.delete('/nodes/:id', async (c) => {
 })
 
 app.post('/connections', async (c) => {
-  const body = await c.req.json<{ from_node: string; to_node: string }>()
+  const body = await c.req.json<{ from_node: string; to_node: string; space_id?: string }>()
+  if (!body.space_id) return c.json({ error: 'missing space_id' }, 400)
   const { data, error } = await c
     .get('supabase')
     .from('connections')
-    .insert({ user_id: c.get('userId'), from_node: body.from_node, to_node: body.to_node })
+    .insert({
+      user_id: c.get('userId'),
+      space_id: body.space_id,
+      from_node: body.from_node,
+      to_node: body.to_node,
+    })
     .select()
     .single()
   if (error) return c.json({ error: error.message }, 500)

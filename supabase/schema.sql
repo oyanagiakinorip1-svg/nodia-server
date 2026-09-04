@@ -1,12 +1,24 @@
--- NODIA: nodes & connections, isolated per-user via Supabase Auth (anonymous sign-ins).
--- Run this in the Supabase SQL editor. Also enable:
+-- NODIA: spaces, nodes & connections, isolated per-user via Supabase Auth.
+-- Run this in the Supabase SQL editor for a *fresh* project. Also enable:
 --   Dashboard > Authentication > Sign In / Providers > Anonymous Sign-ins
+--
+-- If you already have nodes/connections without space_id, use
+-- migration_001_spaces.sql instead - this file assumes a clean database.
 
 create extension if not exists pgcrypto;
+
+create table if not exists public.spaces (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  name text not null default '無題のスペース',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 create table if not exists public.nodes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  space_id uuid not null references public.spaces (id) on delete cascade,
   title text not null default '',
   content text not null default '',
   position_x double precision not null default 0,
@@ -19,17 +31,25 @@ create table if not exists public.nodes (
 create table if not exists public.connections (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  space_id uuid not null references public.spaces (id) on delete cascade,
   from_node uuid not null references public.nodes (id) on delete cascade,
   to_node uuid not null references public.nodes (id) on delete cascade,
   created_at timestamptz not null default now(),
   unique (user_id, from_node, to_node)
 );
 
-create index if not exists nodes_user_id_idx on public.nodes (user_id);
-create index if not exists connections_user_id_idx on public.connections (user_id);
+create index if not exists spaces_user_id_idx on public.spaces (user_id);
+create index if not exists nodes_space_id_idx on public.nodes (space_id);
+create index if not exists connections_space_id_idx on public.connections (space_id);
 
+alter table public.spaces enable row level security;
 alter table public.nodes enable row level security;
 alter table public.connections enable row level security;
+
+create policy "spaces_select_own" on public.spaces for select using (auth.uid() = user_id);
+create policy "spaces_insert_own" on public.spaces for insert with check (auth.uid() = user_id);
+create policy "spaces_update_own" on public.spaces for update using (auth.uid() = user_id);
+create policy "spaces_delete_own" on public.spaces for delete using (auth.uid() = user_id);
 
 create policy "nodes_select_own" on public.nodes for select using (auth.uid() = user_id);
 create policy "nodes_insert_own" on public.nodes for insert with check (auth.uid() = user_id);
@@ -47,6 +67,11 @@ begin
   return new;
 end;
 $$;
+
+drop trigger if exists spaces_touch_updated_at on public.spaces;
+create trigger spaces_touch_updated_at
+before update on public.spaces
+for each row execute function public.touch_updated_at();
 
 drop trigger if exists nodes_touch_updated_at on public.nodes;
 create trigger nodes_touch_updated_at
