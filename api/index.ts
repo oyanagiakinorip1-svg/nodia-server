@@ -39,7 +39,9 @@ app.get('/spaces', async (c) => {
     .select('*')
     .order('created_at')
   if (error) return c.json({ error: error.message }, 500)
-  return c.json(data)
+  // Wrapped in an object (not a bare array) - Unity's JsonUtility can't
+  // parse a top-level JSON array.
+  return c.json({ spaces: data })
 })
 
 app.post('/spaces', async (c) => {
