@@ -1,0 +1,114 @@
+import { Hono } from 'hono'
+import { handle } from 'hono/vercel'
+import { cors } from 'hono/cors'
+import { supabaseForToken } from '../lib/supabase'
+
+export const config = { runtime: 'nodejs' }
+
+type Variables = {
+  supabase: ReturnType<typeof supabaseForToken>
+  userId: string
+}
+
+const app = new Hono<{ Variables: Variables }>().basePath('/api')
+
+// Unity WebGL is served from a different origin than this API, so it needs CORS.
+// Tighten `origin` to your actual WebGL host once you know it.
+app.use('*', cors({ origin: '*', allowHeaders: ['Content-Type', 'Authorization'] }))
+
+app.use('*', async (c, next) => {
+  const header = c.req.header('Authorization') ?? ''
+  const token = header.replace(/^Bearer\s+/i, '')
+  if (!token) return c.json({ error: 'missing bearer token' }, 401)
+
+  const supabase = supabaseForToken(token)
+  const { data, error } = await supabase.auth.getUser(token)
+  if (error || !data.user) return c.json({ error: 'invalid session' }, 401)
+
+  c.set('supabase', supabase)
+  c.set('userId', data.user.id)
+  await next()
+})
+
+type PositionInput = { x: number; y: number; z: number }
+type NodeInput = { title?: string; content?: string; position?: PositionInput }
+
+// Combined snapshot used to restore the whole 3D space in one round trip on login.
+app.get('/space', async (c) => {
+  const supabase = c.get('supabase')
+  const [nodes, connections] = await Promise.all([
+    supabase.from('nodes').select('*').order('created_at'),
+    supabase.from('connections').select('*'),
+  ])
+  if (nodes.error) return c.json({ error: nodes.error.message }, 500)
+  if (connections.error) return c.json({ error: connections.error.message }, 500)
+  return c.json({ nodes: nodes.data, connections: connections.data })
+})
+
+app.post('/nodes', async (c) => {
+  const body = await c.req.json<NodeInput>()
+  const { data, error } = await c
+    .get('supabase')
+    .from('nodes')
+    .insert({
+      user_id: c.get('userId'),
+      title: body.title ?? '',
+      content: body.content ?? '',
+      position_x: body.position?.x ?? 0,
+      position_y: body.position?.y ?? 0,
+      position_z: body.position?.z ?? 0,
+    })
+    .select()
+    .single()
+  if (error) return c.json({ error: error.message }, 500)
+  return c.json(data, 201)
+})
+
+app.put('/nodes/:id', async (c) => {
+  const body = await c.req.json<NodeInput>()
+  const { data, error } = await c
+    .get('supabase')
+    .from('nodes')
+    .update({
+      title: body.title ?? '',
+      content: body.content ?? '',
+      position_x: body.position?.x ?? 0,
+      position_y: body.position?.y ?? 0,
+      position_z: body.position?.z ?? 0,
+    })
+    .eq('id', c.req.param('id'))
+    .select()
+    .single()
+  if (error) return c.json({ error: error.message }, 500)
+  return c.json(data)
+})
+
+app.delete('/nodes/:id', async (c) => {
+  const { error } = await c.get('supabase').from('nodes').delete().eq('id', c.req.param('id'))
+  if (error) return c.json({ error: error.message }, 500)
+  return c.body(null, 204)
+})
+
+app.post('/connections', async (c) => {
+  const body = await c.req.json<{ from_node: string; to_node: string }>()
+  const { data, error } = await c
+    .get('supabase')
+    .from('connections')
+    .insert({ user_id: c.get('userId'), from_node: body.from_node, to_node: body.to_node })
+    .select()
+    .single()
+  if (error) return c.json({ error: error.message }, 500)
+  return c.json(data, 201)
+})
+
+app.delete('/connections/:id', async (c) => {
+  const { error } = await c.get('supabase').from('connections').delete().eq('id', c.req.param('id'))
+  if (error) return c.json({ error: error.message }, 500)
+  return c.body(null, 204)
+})
+
+export default handle(app)
+export const GET = handle(app)
+export const POST = handle(app)
+export const PUT = handle(app)
+export const DELETE = handle(app)
