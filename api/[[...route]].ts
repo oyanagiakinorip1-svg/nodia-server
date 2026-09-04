@@ -105,4 +105,11 @@ app.delete('/connections/:id', async (c) => {
   return c.body(null, 204)
 })
 
-export default handle(app)
+// Vercel's Functions runtime dispatches by named HTTP-method export (Web
+// fetch-style), not a default (req, res) export - hono/vercel's handle()
+// returns a fetch-style handler, so it must be exported per method.
+export const GET = handle(app)
+export const POST = handle(app)
+export const PUT = handle(app)
+export const DELETE = handle(app)
+export const OPTIONS = handle(app)
