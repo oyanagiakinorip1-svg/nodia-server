@@ -56,6 +56,14 @@ app.post('/spaces', async (c) => {
   return c.json(data, 201)
 })
 
+// Cascades to that space's nodes and connections (schema.sql has them as
+// `on delete cascade`), so this one call is enough to remove everything in it.
+app.delete('/spaces/:id', async (c) => {
+  const { error } = await c.get('supabase').from('spaces').delete().eq('id', c.req.param('id'))
+  if (error) return c.json({ error: error.message }, 500)
+  return c.body(null, 204)
+})
+
 // Combined snapshot used to restore one space's nodes/connections in one
 // round trip once the player has picked (or created) a space.
 app.get('/space', async (c) => {
