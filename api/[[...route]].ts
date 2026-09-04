@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { handle } from 'hono/vercel'
 import { cors } from 'hono/cors'
-import { supabaseForToken } from '../lib/supabase'
+import { supabaseForToken } from '../lib/supabase.js'
 
 type Variables = {
   supabase: ReturnType<typeof supabaseForToken>
