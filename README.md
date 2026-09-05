@@ -1,11 +1,13 @@
 # NODIA Server
 
-Hono API + Supabase backend for the [NODIA](https://github.com/) Unity client
-(a 3D node-based memo app). Deployed to Vercel as serverless functions.
+Hono API + Supabase backend for the [NODIA](https://github.com/oyanagiakinorip1-svg/nodia)
+Unity client (a 3D node-based memo app). Deployed to Vercel as serverless
+functions at `https://nodia-server.vercel.app/api` — the live client using it
+is at [nodia-web-six.vercel.app](https://nodia-web-six.vercel.app).
 
 ## Structure
 
-- `api/[[...route]].ts` — Hono app (`/api/space`, `/api/nodes`, `/api/connections`)
+- `api/index.ts` — Hono app (`/spaces`, `/space`, `/nodes`, `/connections`)
 - `lib/supabase.ts` — per-request Supabase client, scoped to the caller's access token
 - `supabase/schema.sql` — table definitions + row level security policies
 
